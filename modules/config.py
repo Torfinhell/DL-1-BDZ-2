@@ -3,17 +3,19 @@ import torch
 
 @dataclass
 class ModelConfig:
-    NUM_HEADS:int=4
-    DIM_KV:int=128
-    DIM_MODEL:int=512
-    EPS_LAYER_NORM:int=1e-8
-    D_FF=2048
-    NUM_ENCODER_LAYERS:int=4
-    NUM_DECODER_LAYERS:int=4
-    VOCAB_SIZE:int=0
-    PAD_TOKEN_ID:int=0 
-    BOS_TOKEN_ID:int=2
-    EOS_TOKEN_ID:int=4
+    NUM_HEADS: int = 8
+    DIM_KV: int = 64
+    DIM_MODEL: int = 512
+    EPS_LAYER_NORM: float = 1e-8
+    D_FF: int = 2048
+    NUM_ENCODER_LAYERS: int = 4
+    NUM_DECODER_LAYERS: int = 4
+    MAX_SEQ_LEN: int = 512
+    DROPOUT: float = 0.1
+    VOCAB_SIZE: int = 0
+    PAD_TOKEN_ID: int = 0
+    BOS_TOKEN_ID: int = 2
+    EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
     BATCH_SIZE: int = 40
