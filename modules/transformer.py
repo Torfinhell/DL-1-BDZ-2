@@ -262,13 +262,13 @@ class TransformerConditionalGeneration(nn.Module):
                 break
 
             return decoder_input_ids
-        def make_padding_mask(self, input_ids):
-            if input_ids is None:
-                return None
-            mask = (input_ids == self.config.PAD_TOKEN_ID)
-            mask = mask.unsqueeze(1).unsqueeze(2)  
-            return mask.float() * -1e9
+    def make_padding_mask(self, input_ids):
+        if input_ids is None:
+            return None
+        mask = (input_ids == self.config.PAD_TOKEN_ID)
+        mask = mask.unsqueeze(1).unsqueeze(2)  
+        return mask.float() * -1e9
 
-        def make_causal_mask(self, seq_len, device):
-            mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
-            return mask.float() * -1e9
+    def make_causal_mask(self, seq_len, device):
+        mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
+        return mask.float() * -1e9
