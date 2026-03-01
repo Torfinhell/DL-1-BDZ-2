@@ -7,7 +7,7 @@ class ModelConfig:
     DIM_KV:int=128
     DIM_MODEL:int=512
     EPS_LAYER_NORM:int=1e-8
-    D_FF=1000
+    D_FF=2048
     NUM_ENCODER_LAYERS:int=4
     NUM_DECODER_LAYERS:int=4
     VOCAB_SIZE:int=0
