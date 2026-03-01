@@ -47,7 +47,7 @@ class SelfAttention(nn.Module):
             config.NUM_HEADS,
             config.DIM_KV
         )
-        self.layer_norm = nn.RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
 
     def forward(self, hidden_states, mask=None):
         normed = self.layer_norm(hidden_states)
@@ -60,7 +60,7 @@ class CrossAttention(nn.Module):
             config.NUM_HEADS,
             config.DIM_KV
         )
-        self.layer_norm = nn.RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
 
     def forward(self, hidden_states, encoder_hidden_states, mask=None):
         normed = self.layer_norm(hidden_states)
@@ -69,10 +69,20 @@ class CrossAttention(nn.Module):
             key_value_states=encoder_hidden_states,
             mask=mask
         )
+class RMSNorm(nn.Module):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        variance = x.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
+        x = x * torch.rsqrt(variance + self.eps)
+        return self.weight * x
 class FFN(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
         self.wi = nn.Linear(config.DIM_MODEL, config.D_FF, bias=False)
         self.wo = nn.Linear(config.D_FF, config.DIM_MODEL, bias=False)
         self.activation = nn.ReLU()
@@ -122,7 +132,7 @@ class TransformerEncoder(nn.Module):
             [TransformerBlock(config, is_decoder=False)
              for _ in range(config.NUM_ENCODER_LAYERS)]
         )
-        self.layer_norm = nn.RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
 
     def forward(self, input_ids, padding_mask=None):
         hidden_states = self.embed_tokens(input_ids)
@@ -142,7 +152,7 @@ class TransformerDecoder(nn.Module):
             [TransformerBlock(config, is_decoder=True)
              for _ in range(config.NUM_DECODER_LAYERS)]
         )
-        self.layer_norm = nn.RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
 
     def forward(
         self,
