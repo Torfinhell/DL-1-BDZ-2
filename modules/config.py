@@ -23,7 +23,7 @@ class TrainingConfig:
     DATA_FOLDER:str="data"
     NUM_EPOCHS:int=100
     LR:float=1e-4
-    TRAIN_EPOCH_LEN:int=None
+    TRAIN_EPOCH_LEN:int=100
     GRAD_ACUM:int=4
 @dataclass
 class InferenceConfig:
