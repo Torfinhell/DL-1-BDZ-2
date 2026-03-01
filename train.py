@@ -15,8 +15,7 @@ def train(training_config:TrainingConfig, model, dl_train, dl_val, vocab):
         lr=training_config.LR
     )
 
-    gradient_accumulation_steps = 4   # <-- added gradient accumulation
-
+    gradient_accumulation_steps = training_config.GRAD_ACUM   
     best_bleu = 0.0
 
     for epoch in range(training_config.NUM_EPOCHS):
@@ -25,18 +24,18 @@ def train(training_config:TrainingConfig, model, dl_train, dl_val, vocab):
 
         pbar = tqdm(dl_train, desc=f"Epoch {epoch+1}", leave=False)
 
-        optimizer.zero_grad()   # moved outside the loop for accumulation
+        optimizer.zero_grad()  
         for step, (src, tgt, _, _) in enumerate(pbar):
 
             src = src.to(device)
             tgt = tgt.to(device)
 
             outputs = model(input_ids=src, labels=tgt)
-            loss = outputs["loss"] / gradient_accumulation_steps   # normalize loss
+            loss = outputs["loss"] / gradient_accumulation_steps  
 
             loss.backward()
 
-            total_train_loss += loss.item() * gradient_accumulation_steps   # accumulate unscaled loss
+            total_train_loss += loss.item() * gradient_accumulation_steps  
 
             if (step + 1) % gradient_accumulation_steps == 0:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -45,7 +44,6 @@ def train(training_config:TrainingConfig, model, dl_train, dl_val, vocab):
 
             pbar.set_postfix(loss=loss.item() * gradient_accumulation_steps)
 
-        # If steps not multiple of accumulation_steps, do a final step
         if (step + 1) % gradient_accumulation_steps != 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
