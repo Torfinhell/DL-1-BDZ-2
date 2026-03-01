@@ -210,3 +210,4 @@ data
 .vscode
 uv.lock
 models
+*txt

@@ -197,9 +197,11 @@ class TransformerConditionalGeneration(nn.Module):
         labels=None,
         encoder_hidden_states=None,
         decoder_input_ids=None,
+        encoder_padding_mask=None, 
     ):
 
-        encoder_padding_mask = self.make_padding_mask(input_ids)
+        if encoder_padding_mask is None and input_ids is not None:
+            encoder_padding_mask = self.make_padding_mask(input_ids)
 
         if encoder_hidden_states is None:
             encoder_hidden_states = self.encoder(
