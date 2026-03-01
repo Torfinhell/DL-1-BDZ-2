@@ -250,16 +250,16 @@ def generate(self, input_ids, max_length=40):
             encoder_padding_mask=encoder_padding_mask
         )
 
-            next_token_logits = outputs["logits"][:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+        next_token_logits = outputs["logits"][:, -1, :]
+        next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
 
-            decoder_input_ids = torch.cat(
-                [decoder_input_ids, next_token],
-                dim=-1
-            )
+        decoder_input_ids = torch.cat(
+            [decoder_input_ids, next_token],
+            dim=-1
+        )
 
-            if (next_token == self.config.EOS_TOKEN_ID).all():
-                break
+        if (next_token == self.config.EOS_TOKEN_ID).all():
+            break
 
         return decoder_input_ids
     def make_padding_mask(self, input_ids):
