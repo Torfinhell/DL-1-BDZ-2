@@ -3,6 +3,17 @@ import torch
 from einops import rearrange
 from typing import Optional
 
+class RMSNorm(nn.Module):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        variance = x.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
+        x = x * torch.rsqrt(variance + self.eps)
+        return self.weight * x
+
 
 class Attention(nn.Module):
     def __init__(self, d_model, num_heads, d_kv):
@@ -39,6 +50,8 @@ class Attention(nn.Module):
 
         attn_output = rearrange(attn_output, "B H L D -> B L (H D)")
         return self.o(attn_output)
+
+
 class SelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -48,10 +61,14 @@ class SelfAttention(nn.Module):
             config.DIM_KV
         )
         self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.dropout = nn.Dropout(config.DROPOUT)
 
     def forward(self, hidden_states, mask=None):
         normed = self.layer_norm(hidden_states)
-        return hidden_states + self.attn(normed, mask=mask)
+        attn_out = self.attn(normed, mask=mask)
+        return hidden_states + self.dropout(attn_out)
+
+
 class CrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -61,24 +78,18 @@ class CrossAttention(nn.Module):
             config.DIM_KV
         )
         self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
+        self.dropout = nn.Dropout(config.DROPOUT)
 
     def forward(self, hidden_states, encoder_hidden_states, mask=None):
         normed = self.layer_norm(hidden_states)
-        return hidden_states + self.attn(
+        attn_out = self.attn(
             normed,
             key_value_states=encoder_hidden_states,
             mask=mask
         )
-class RMSNorm(nn.Module):
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.eps = eps
+        return hidden_states + self.dropout(attn_out)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        variance = x.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
-        x = x * torch.rsqrt(variance + self.eps)
-        return self.weight * x
+
 class FFN(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -86,13 +97,15 @@ class FFN(nn.Module):
         self.wi = nn.Linear(config.DIM_MODEL, config.D_FF, bias=False)
         self.wo = nn.Linear(config.D_FF, config.DIM_MODEL, bias=False)
         self.activation = nn.ReLU()
+        self.dropout = nn.Dropout(config.DROPOUT)
 
     def forward(self, hidden_states):
         normed = self.layer_norm(hidden_states)
         x = self.wi(normed)
         x = self.activation(x)
         x = self.wo(x)
-        return hidden_states + x
+        return hidden_states + self.dropout(x)
+
 
 class TransformerBlock(nn.Module):
     def __init__(self, config, is_decoder):
@@ -124,10 +137,14 @@ class TransformerBlock(nn.Module):
 
         hidden_states = self.ffn(hidden_states)
         return hidden_states
+
+
 class TransformerEncoder(nn.Module):
     def __init__(self, config, shared_embedding):
         super().__init__()
         self.embed_tokens = shared_embedding
+        self.pos_embed = nn.Embedding(config.MAX_SEQ_LEN, config.DIM_MODEL)
+        self.embed_dropout = nn.Dropout(config.DROPOUT)
         self.blocks = nn.ModuleList(
             [TransformerBlock(config, is_decoder=False)
              for _ in range(config.NUM_ENCODER_LAYERS)]
@@ -135,7 +152,12 @@ class TransformerEncoder(nn.Module):
         self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
 
     def forward(self, input_ids, padding_mask=None):
-        hidden_states = self.embed_tokens(input_ids)
+        seq_len = input_ids.size(1)
+        token_emb = self.embed_tokens(input_ids)
+        positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0)
+        pos_emb = self.pos_embed(positions)
+        hidden_states = token_emb + pos_emb
+        hidden_states = self.embed_dropout(hidden_states)
 
         for block in self.blocks:
             hidden_states = block(
@@ -144,10 +166,14 @@ class TransformerEncoder(nn.Module):
             )
 
         return self.layer_norm(hidden_states)
+
+
 class TransformerDecoder(nn.Module):
     def __init__(self, config, shared_embedding):
         super().__init__()
         self.embed_tokens = shared_embedding
+        self.pos_embed = nn.Embedding(config.MAX_SEQ_LEN, config.DIM_MODEL)
+        self.embed_dropout = nn.Dropout(config.DROPOUT)
         self.blocks = nn.ModuleList(
             [TransformerBlock(config, is_decoder=True)
              for _ in range(config.NUM_DECODER_LAYERS)]
@@ -161,7 +187,12 @@ class TransformerDecoder(nn.Module):
         self_mask=None,
         cross_mask=None
     ):
-        hidden_states = self.embed_tokens(input_ids)
+        seq_len = input_ids.size(1)
+        token_emb = self.embed_tokens(input_ids)
+        positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0)
+        pos_emb = self.pos_embed(positions)
+        hidden_states = token_emb + pos_emb
+        hidden_states = self.embed_dropout(hidden_states)
 
         for block in self.blocks:
             hidden_states = block(
@@ -172,6 +203,8 @@ class TransformerDecoder(nn.Module):
             )
 
         return self.layer_norm(hidden_states)
+
+
 class TransformerConditionalGeneration(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -197,9 +230,8 @@ class TransformerConditionalGeneration(nn.Module):
         labels=None,
         encoder_hidden_states=None,
         decoder_input_ids=None,
-        encoder_padding_mask=None, 
+        encoder_padding_mask=None,
     ):
-
         if encoder_padding_mask is None and input_ids is not None:
             encoder_padding_mask = self.make_padding_mask(input_ids)
 
@@ -222,7 +254,6 @@ class TransformerConditionalGeneration(nn.Module):
         )
 
         self_mask = decoder_padding_mask + causal_mask
-
         cross_mask = encoder_padding_mask
 
         decoder_hidden_states = self.decoder(
@@ -237,17 +268,18 @@ class TransformerConditionalGeneration(nn.Module):
         loss = None
         if labels is not None:
             loss = nn.functional.cross_entropy(
-            logits.view(-1, logits.size(-1)),
-            labels.view(-1),
-            ignore_index=self.config.PAD_TOKEN_ID,
-            label_smoothing=0.1
-        )
+                logits.view(-1, logits.size(-1)),
+                labels.view(-1),
+                ignore_index=self.config.PAD_TOKEN_ID,
+                label_smoothing=0.1
+            )
 
         return {"loss": loss, "logits": logits}
+
     @torch.no_grad()
     def generate(self, input_ids, max_length=40):
         encoder_hidden_states = self.encoder(input_ids)
-        encoder_padding_mask = self.make_padding_mask(input_ids)   
+        encoder_padding_mask = self.make_padding_mask(input_ids)
 
         decoder_input_ids = torch.full(
             (input_ids.size(0), 1),
@@ -273,7 +305,7 @@ class TransformerConditionalGeneration(nn.Module):
             if (next_token == self.config.EOS_TOKEN_ID).all():
                 break
 
-            return decoder_input_ids
+        return decoder_input_ids  
     def make_padding_mask(self, input_ids):
         if input_ids is None:
             return None
