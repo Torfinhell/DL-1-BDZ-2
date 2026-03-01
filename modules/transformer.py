@@ -232,43 +232,43 @@ class TransformerConditionalGeneration(nn.Module):
         )
 
         return {"loss": loss, "logits": logits}
-@torch.no_grad()
-def generate(self, input_ids, max_length=40):
-    encoder_hidden_states = self.encoder(input_ids)
-    encoder_padding_mask = self.make_padding_mask(input_ids)   
+    @torch.no_grad()
+    def generate(self, input_ids, max_length=40):
+        encoder_hidden_states = self.encoder(input_ids)
+        encoder_padding_mask = self.make_padding_mask(input_ids)   
 
-    decoder_input_ids = torch.full(
-        (input_ids.size(0), 1),
-        self.config.BOS_TOKEN_ID,
-        device=input_ids.device
-    )
-
-    for _ in range(max_length):
-        outputs = self(
-            encoder_hidden_states=encoder_hidden_states,
-            decoder_input_ids=decoder_input_ids,
-            encoder_padding_mask=encoder_padding_mask
+        decoder_input_ids = torch.full(
+            (input_ids.size(0), 1),
+            self.config.BOS_TOKEN_ID,
+            device=input_ids.device
         )
 
-        next_token_logits = outputs["logits"][:, -1, :]
-        next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+        for _ in range(max_length):
+            outputs = self(
+                encoder_hidden_states=encoder_hidden_states,
+                decoder_input_ids=decoder_input_ids,
+                encoder_padding_mask=encoder_padding_mask
+            )
 
-        decoder_input_ids = torch.cat(
-            [decoder_input_ids, next_token],
-            dim=-1
-        )
+            next_token_logits = outputs["logits"][:, -1, :]
+            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
 
-        if (next_token == self.config.EOS_TOKEN_ID).all():
-            break
+            decoder_input_ids = torch.cat(
+                [decoder_input_ids, next_token],
+                dim=-1
+            )
 
-        return decoder_input_ids
-    def make_padding_mask(self, input_ids):
-        if input_ids is None:
-            return None
-        mask = (input_ids == self.config.PAD_TOKEN_ID)
-        mask = mask.unsqueeze(1).unsqueeze(2)  
-        return mask.float() * -1e9
+            if (next_token == self.config.EOS_TOKEN_ID).all():
+                break
 
-    def make_causal_mask(self, seq_len, device):
-        mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
-        return mask.float() * -1e9
+            return decoder_input_ids
+        def make_padding_mask(self, input_ids):
+            if input_ids is None:
+                return None
+            mask = (input_ids == self.config.PAD_TOKEN_ID)
+            mask = mask.unsqueeze(1).unsqueeze(2)  
+            return mask.float() * -1e9
+
+        def make_causal_mask(self, seq_len, device):
+            mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
+            return mask.float() * -1e9
