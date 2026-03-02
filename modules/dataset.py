@@ -84,7 +84,7 @@ class TranslationDataset(Dataset):
         tgt_enc = self._encode_tgt(self.tgt_texts[idx])
         src_pad = self.pad_sequence(src_enc, self.src_max_len, self.src_pad)
         tgt_pad = self.pad_sequence(tgt_enc, self.tgt_max_len, self.tgt_pad)
-        return src_pad, tgt_pad, len(src_enc), len(tgt_enc)
+        return src_pad, tgt_pad
 
 
 def collate_fn(batch):
