@@ -31,6 +31,8 @@ def train_sentencepiece(
     sp = spm.SentencePieceProcessor()
     sp.load(f"{model_prefix}.model")
     return sp
+
+
 class TranslationDataset(Dataset):
     def __init__(
         self,
@@ -38,17 +40,32 @@ class TranslationDataset(Dataset):
         tgt_sp: spm.SentencePieceProcessor,
         src_file: str,
         tgt_file: str,
-        train_epoch_len: Optional[int] = None
+        train_epoch_len: Optional[int] = None,
+        max_seq_len: Optional[int] = None          # new parameter
     ):
+        """
+        Args:
+            src_sp: Source language SentencePiece processor.
+            tgt_sp: Target language SentencePiece processor.
+            src_file: Path to source text file (one sentence per line).
+            tgt_file: Path to target text file (aligned with src_file).
+            train_epoch_len: If set, limits dataset size (useful for debugging).
+            max_seq_len: Maximum allowed sequence length (including BOS/EOS). 
+                         Pairs exceeding this length are filtered out.
+        """
         self.src_sp = src_sp
         self.tgt_sp = tgt_sp
         self.train_epoch_len = train_epoch_len
+        self.max_seq_len = max_seq_len
 
+        # Read all lines
         with open(src_file, encoding="utf-8") as f:
-            self.src_texts = [line.strip() for line in f]
+            src_texts = [line.strip() for line in f]
         with open(tgt_file, encoding="utf-8") as f:
-            self.tgt_texts = [line.strip() for line in f]
-        assert len(self.src_texts) == len(self.tgt_texts)
+            tgt_texts = [line.strip() for line in f]
+        assert len(src_texts) == len(tgt_texts)
+
+        # Store tokenizer special IDs
         self.src_pad = src_sp.pad_id()
         self.src_bos = src_sp.bos_id()
         self.src_eos = src_sp.eos_id()
@@ -58,8 +75,36 @@ class TranslationDataset(Dataset):
         self.tgt_bos = tgt_sp.bos_id()
         self.tgt_eos = tgt_sp.eos_id()
         self.tgt_unk = tgt_sp.unk_id()
-        self.src_max_len = max(len(self._encode_src(t)) for t in self.src_texts)
-        self.tgt_max_len = max(len(self._encode_tgt(t)) for t in self.tgt_texts)
+
+        # Filter out pairs that exceed max_seq_len (if specified)
+        self.src_texts = []
+        self.tgt_texts = []
+        max_src_len = 0
+        max_tgt_len = 0
+
+        for src_text, tgt_text in zip(src_texts, tgt_texts):
+            src_enc = self._encode_src(src_text)
+            tgt_enc = self._encode_tgt(tgt_text)
+
+            if max_seq_len is not None:
+                if len(src_enc) > max_seq_len or len(tgt_enc) > max_seq_len:
+                    continue  # skip this pair
+
+            self.src_texts.append(src_text)
+            self.tgt_texts.append(tgt_text)
+
+            # Update max lengths for padding
+            if len(src_enc) > max_src_len:
+                max_src_len = len(src_enc)
+            if len(tgt_enc) > max_tgt_len:
+                max_tgt_len = len(tgt_enc)
+
+        if len(self.src_texts) == 0:
+            raise RuntimeError("No sentences left after filtering with max_seq_len={}".format(max_seq_len))
+
+        # Set padding lengths to the actual maximums (which are ≤ max_seq_len if filtering was applied)
+        self.src_max_len = max_src_len
+        self.tgt_max_len = max_tgt_len
 
     def __len__(self):
         if self.train_epoch_len is not None:
@@ -88,7 +133,7 @@ class TranslationDataset(Dataset):
 
 
 def collate_fn(batch):
-    src, tgt= zip(*batch)
+    src, tgt = zip(*batch)
     return torch.stack(src), torch.stack(tgt)
 
 

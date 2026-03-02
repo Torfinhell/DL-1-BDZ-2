@@ -113,9 +113,15 @@ if __name__ == "__main__":
     model_config.BOS_TOKEN_ID = src_sp.bos_id()
     model_config.EOS_TOKEN_ID = src_sp.eos_id()
 
-    ds_train = TranslationDataset(src_sp, tgt_sp, train_de, train_en,
-                                  train_epoch_len=training_config.TRAIN_EPOCH_LEN)
-    ds_val = TranslationDataset(src_sp, tgt_sp, val_de, val_en)
+    ds_train = TranslationDataset(
+    src_sp, tgt_sp, train_de, train_en,
+        train_epoch_len=training_config.TRAIN_EPOCH_LEN,
+        max_seq_len=model_config.MAX_SEQ_LEN     
+    )
+    ds_val = TranslationDataset(
+        src_sp, tgt_sp, val_de, val_en,
+        max_seq_len=model_config.MAX_SEQ_LEN     
+    )   
 
     dl_train = DataLoader(ds_train, batch_size=training_config.BATCH_SIZE, shuffle=True,
                           pin_memory=True, collate_fn=collate_fn)
