@@ -88,8 +88,8 @@ class TranslationDataset(Dataset):
 
 
 def collate_fn(batch):
-    src, tgt, src_len, tgt_len = zip(*batch)
-    return torch.stack(src), torch.stack(tgt), torch.tensor(src_len), torch.tensor(tgt_len)
+    src, tgt= zip(*batch)
+    return torch.stack(src), torch.stack(tgt)
 
 
 def decode_batch(batch_ids, sp_model: spm.SentencePieceProcessor, pad_id: int, eos_id: int) -> List[str]:
