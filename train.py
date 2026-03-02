@@ -107,8 +107,8 @@ if __name__ == "__main__":
     train_en = f"{data_folder}/train.de-en.en"
     val_de = f"{data_folder}/val.de-en.de"
     val_en = f"{data_folder}/val.de-en.en"
-    src_sp = train_sentencepiece([train_de, val_de], "spm_de", vocab_size=training_config.VOCAB_SIZE)
-    tgt_sp = train_sentencepiece([train_en, val_en], "spm_en", vocab_size=training_config.VOCAB_SIZE)
+    src_sp = train_sentencepiece([train_de, val_de], "spm_de", vocab_size=model_config.VOCAB_SIZE)
+    tgt_sp = train_sentencepiece([train_en, val_en], "spm_en", vocab_size=model_config.VOCAB_SIZE)
 
     model_config.VOCAB_SIZE = max(src_sp.get_piece_size(), tgt_sp.get_piece_size())
     model_config.PAD_TOKEN_ID = src_sp.pad_id()
