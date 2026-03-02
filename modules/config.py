@@ -29,6 +29,7 @@ class TrainingConfig:
     LR: float = 1e-4
     TRAIN_EPOCH_LEN: int = None
     GRAD_ACUM: int = 4
+    VOCAB_SIZE = 32000
 
 @dataclass
 class InferenceConfig:
