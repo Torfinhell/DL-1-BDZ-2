@@ -17,7 +17,6 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
 
     gradient_accumulation_steps = training_config.GRAD_ACUM
     best_bleu = 0.0
-
     steps_per_epoch = (len(dl_train) + gradient_accumulation_steps - 1) // gradient_accumulation_steps
     total_optimizer_steps = steps_per_epoch * training_config.NUM_EPOCHS
 
