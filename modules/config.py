@@ -12,10 +12,10 @@ class ModelConfig:
     NUM_DECODER_LAYERS: int = 12
     MAX_SEQ_LEN: int = 512
     DROPOUT: float = 0.1
-    VOCAB_SIZE: int = 32128
+    VOCAB_SIZE: int = 0
     PAD_TOKEN_ID: int = 0
-    BOS_TOKEN_ID: int = 0
-    EOS_TOKEN_ID: int = 1
+    BOS_TOKEN_ID: int = 2
+    EOS_TOKEN_ID: int = 4
     RELATIVE_ATTENTION_NUM_BUCKETS: int = 32
 
 @dataclass
