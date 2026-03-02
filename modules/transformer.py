@@ -253,18 +253,14 @@ class TransformerConditionalGeneration(nn.Module):
             decoder_input_ids.device
         )
 
-        self_mask = decoder_padding_mask + causal_mask
-        cross_mask = encoder_padding_mask
-
         decoder_hidden_states = self.decoder(
             decoder_input_ids,
             encoder_hidden_states,
-            self_mask=self_mask,
-            cross_mask=cross_mask
+            self_mask=decoder_padding_mask + causal_mask,
+            cross_mask=encoder_padding_mask
         )
 
         logits = self.lm_head(decoder_hidden_states)
-
         loss = None
         if labels is not None:
             loss = nn.functional.cross_entropy(
@@ -273,7 +269,6 @@ class TransformerConditionalGeneration(nn.Module):
                 ignore_index=self.config.PAD_TOKEN_ID,
                 label_smoothing=0.1
             )
-
         return {"loss": loss, "logits": logits}
 
     @torch.no_grad()

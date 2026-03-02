@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from modules.dataset import TranslationDataset, collate_fn, decode_batch, train_sentencepiece
 from modules.transformer import TransformerConditionalGeneration
 from modules.config import TrainingConfig, ModelConfig
+import os
 
 def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
     device = training_config.DEVICE
@@ -33,7 +34,7 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
         total_train_loss = 0.0
         pbar = tqdm(dl_train, desc=f"Epoch {epoch+1}", leave=False)
         optimizer.zero_grad()
-        for step, (src, tgt, _, _) in enumerate(pbar):
+        for step, (src, tgt) in enumerate(pbar):
             src = src.to(device)
             tgt = tgt.to(device)
             outputs = model(input_ids=src, labels=tgt)
@@ -92,6 +93,7 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
 
         if bleu > best_bleu:
             best_bleu = bleu
+            os.makedirs("models", exist_ok=True)
             torch.save(model.state_dict(), "models/best_model.pt")
 
 
