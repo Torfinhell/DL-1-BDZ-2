@@ -28,28 +28,23 @@ class Attention(nn.Module):
         self.v = nn.Linear(d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, d_model, bias=False)
 
-    def forward(
-        self,
-        hidden_states,
-        key_value_states=None,
-        mask: Optional[torch.Tensor] = None,
-    ):
+    def forward(self, hidden_states, key_value_states=None, mask=None):
         source = key_value_states if key_value_states is not None else hidden_states
-
-        q = rearrange(self.q(hidden_states), "B L (H D) -> B H L D", H=self.num_heads)
-        k = rearrange(self.k(source), "B L (H D) -> B H L D", H=self.num_heads)
-        v = rearrange(self.v(source), "B L (H D) -> B H L D", H=self.num_heads)
-
-        scores = torch.matmul(q, k.transpose(-1, -2))
+        B, L, _ = hidden_states.shape
+        S = source.size(1) 
+        q = self.q(hidden_states)  
+        k = self.k(source)         
+        v = self.v(source)         
+        q = q.view(B, L, self.num_heads, self.d_kv).permute(0, 2, 1, 3)
+        k = k.view(B, S, self.num_heads, self.d_kv).permute(0, 2, 1, 3)
+        v = v.view(B, S, self.num_heads, self.d_kv).permute(0, 2, 1, 3)
+        scores = torch.matmul(q, k.transpose(-1, -2)) 
         scores = scores / (self.d_kv ** 0.5)
-
         if mask is not None:
             scores = scores + mask
-
         attn = torch.softmax(scores, dim=-1)
-        attn_output = torch.matmul(attn, v)
-
-        attn_output = rearrange(attn_output, "B H L D -> B L (H D)")
+        attn_output = torch.matmul(attn, v) 
+        attn_output = attn_output.permute(0, 2, 1, 3).reshape(B, L, -1)  
         return self.o(attn_output)
 
 
