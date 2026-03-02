@@ -7,7 +7,7 @@ class ModelConfig:
     DIM_KV: int = 64
     DIM_MODEL: int = 3000
     EPS_LAYER_NORM: float = 1e-8
-    D_FF: int = 5000
+    D_FF: int = 2048
     NUM_ENCODER_LAYERS: int = 2
     NUM_DECODER_LAYERS: int = 2
     MAX_SEQ_LEN: int = 512
