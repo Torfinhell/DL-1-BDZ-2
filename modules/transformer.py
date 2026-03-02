@@ -1,6 +1,5 @@
 from torch import nn
 import torch
-from einops import rearrange
 from typing import Optional
 import math
 
