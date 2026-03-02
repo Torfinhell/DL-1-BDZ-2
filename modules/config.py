@@ -17,7 +17,7 @@ class ModelConfig:
     BOS_TOKEN_ID: int = 2
     EOS_TOKEN_ID: int = 4
     RELATIVE_ATTENTION_NUM_BUCKETS: int = 32
-
+    VAL_EVERY_STEP:int=1000
 @dataclass
 class TrainingConfig:
     BATCH_SIZE: int = 16
