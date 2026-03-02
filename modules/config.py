@@ -1,27 +1,13 @@
 from dataclasses import dataclass
 import torch
 
-# @dataclass
-# class ModelConfig:
-#     NUM_HEADS: int = 12
-#     DIM_KV: int = 64
-#     DIM_MODEL: int = 768
-#     EPS_LAYER_NORM: float = 1e-6
-#     D_FF: int = 3072
-#     NUM_ENCODER_LAYERS: int = 12
-#     NUM_DECODER_LAYERS: int = 12
-#     DROPOUT: float = 0.1
-#     VOCAB_SIZE: int = 32000
-#     PAD_TOKEN_ID: int = 0
-#     BOS_TOKEN_ID: int = 2
-#     EOS_TOKEN_ID: int = 4
 @dataclass
 class ModelConfig:
     NUM_HEADS: int = 12
     DIM_KV: int = 64
-    DIM_MODEL: int = 100
+    DIM_MODEL: int = 768
     EPS_LAYER_NORM: float = 1e-6
-    D_FF: int = 100
+    D_FF: int = 3072
     NUM_ENCODER_LAYERS: int = 12
     NUM_DECODER_LAYERS: int = 12
     DROPOUT: float = 0.1
@@ -29,6 +15,20 @@ class ModelConfig:
     PAD_TOKEN_ID: int = 0
     BOS_TOKEN_ID: int = 2
     EOS_TOKEN_ID: int = 4
+# @dataclass
+# class ModelConfig:
+#     NUM_HEADS: int = 12
+#     DIM_KV: int = 64
+#     DIM_MODEL: int = 100
+#     EPS_LAYER_NORM: float = 1e-6
+#     D_FF: int = 100
+#     NUM_ENCODER_LAYERS: int = 12
+#     NUM_DECODER_LAYERS: int = 12
+#     DROPOUT: float = 0.1
+#     VOCAB_SIZE: int = 32000
+#     PAD_TOKEN_ID: int = 0
+#     BOS_TOKEN_ID: int = 2
+#     EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
     BATCH_SIZE:int=100
