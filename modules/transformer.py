@@ -273,8 +273,8 @@ class TransformerConditionalGeneration(nn.Module):
 
     @torch.no_grad()
     def generate(self, input_ids, max_length=40):
-        encoder_hidden_states = self.encoder(input_ids)
         encoder_padding_mask = self.make_padding_mask(input_ids)
+        encoder_hidden_states = self.encoder(input_ids, padding_mask=encoder_padding_mask)
 
         decoder_input_ids = torch.full(
             (input_ids.size(0), 1),

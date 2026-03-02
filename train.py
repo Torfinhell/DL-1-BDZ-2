@@ -87,7 +87,7 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
                 all_refs.extend([[r] for r in refs])
 
         avg_val_loss = total_val_loss / len(dl_val)
-        bleu = sacrebleu.corpus_bleu(all_preds, list(zip(*all_refs))).score
+        bleu = sacrebleu.corpus_bleu(all_preds, all_refs).score
 
         print(f"\nEpoch {epoch+1}")
         print(f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | BLEU: {bleu:.2f}")
