@@ -5,9 +5,9 @@ import torch
 class ModelConfig:
     NUM_HEADS: int = 12
     DIM_KV: int = 64
-    DIM_MODEL: int = 100
+    DIM_MODEL: int = 768
     EPS_LAYER_NORM: float = 1e-6
-    D_FF: int = 100
+    D_FF: int = 3072
     NUM_ENCODER_LAYERS: int = 12
     NUM_DECODER_LAYERS: int = 12
     MAX_SEQ_LEN: int = 50
