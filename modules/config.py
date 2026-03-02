@@ -10,7 +10,7 @@ class ModelConfig:
     D_FF: int = 100
     NUM_ENCODER_LAYERS: int = 12
     NUM_DECODER_LAYERS: int = 12
-    MAX_SEQ_LEN: int = 35
+    MAX_SEQ_LEN: int = 50
     DROPOUT: float = 0.1
     VOCAB_SIZE: int = 32000
     PAD_TOKEN_ID: int = 0
@@ -18,7 +18,7 @@ class ModelConfig:
     EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
-    BATCH_SIZE:int=16
+    BATCH_SIZE:int=40
     DEVICE: torch.device = torch.device(
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
