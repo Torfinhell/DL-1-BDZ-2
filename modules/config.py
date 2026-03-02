@@ -39,7 +39,7 @@ class TrainingConfig:
     NUM_EPOCHS: int = 10
     LR: float = 1e-4
     TRAIN_EPOCH_LEN: int = None
-    GRAD_ACUM: int = 4
+    GRAD_ACUM: int = 1
     VOCAB_SIZE = 32000
 
 @dataclass
