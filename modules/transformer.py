@@ -304,4 +304,5 @@ class TransformerConditionalGeneration(nn.Module):
 
     def make_causal_mask(self, seq_len, device):
         mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
+        mask = mask.unsqueeze(0).unsqueeze(0)  
         return mask.float() * -1e9
