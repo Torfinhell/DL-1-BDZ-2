@@ -6,6 +6,8 @@ from modules.dataset import TranslationDataset, collate_fn, decode_batch, train_
 from modules.transformer import TransformerConditionalGeneration
 from modules.config import TrainingConfig, ModelConfig
 import os
+from functools import partial
+
 
 def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
     device = training_config.DEVICE
@@ -115,18 +117,27 @@ if __name__ == "__main__":
 
     ds_train = TranslationDataset(
     src_sp, tgt_sp, train_de, train_en,
-        train_epoch_len=training_config.TRAIN_EPOCH_LEN,
-        max_seq_len=model_config.MAX_SEQ_LEN     
+    train_epoch_len=training_config.TRAIN_EPOCH_LEN
     )
     ds_val = TranslationDataset(
-        src_sp, tgt_sp, val_de, val_en,
-        max_seq_len=model_config.MAX_SEQ_LEN     
-    )   
+        src_sp, tgt_sp, val_de, val_en
+    )
+    collate_fn_with_pad = partial(collate_fn, pad_id=model_config.PAD_TOKEN_ID)
 
-    dl_train = DataLoader(ds_train, batch_size=training_config.BATCH_SIZE, shuffle=True,
-                          pin_memory=True, collate_fn=collate_fn)
-    dl_val = DataLoader(ds_val, batch_size=training_config.BATCH_SIZE, shuffle=False,
-                        pin_memory=True, collate_fn=collate_fn)
+    dl_train = DataLoader(
+        ds_train,
+        batch_size=training_config.BATCH_SIZE,
+        shuffle=True,
+        pin_memory=True,
+        collate_fn=collate_fn_with_pad
+    )
+    dl_val = DataLoader(
+        ds_val,
+        batch_size=training_config.BATCH_SIZE,
+        shuffle=False,
+        pin_memory=True,
+        collate_fn=collate_fn_with_pad
+    )
 
     model = TransformerConditionalGeneration(model_config).to(training_config.DEVICE)
     train(training_config, model, dl_train, dl_val, tgt_sp)   

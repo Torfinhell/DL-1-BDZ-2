@@ -2,6 +2,7 @@ from torch import nn
 import torch
 from einops import rearrange
 from typing import Optional
+import math
 
 class RMSNorm(nn.Module):
     def __init__(self, hidden_size: int, eps: float = 1e-6):
@@ -139,11 +140,22 @@ class TransformerBlock(nn.Module):
         return hidden_states
 
 
+def get_sinusoidal_embeddings(seq_len: int, d_model: int, device: torch.device) -> torch.Tensor:
+    positions = torch.arange(seq_len, dtype=torch.float, device=device).unsqueeze(1)
+    div_term = torch.exp(
+        torch.arange(0, d_model, 2, dtype=torch.float, device=device) *
+        (-math.log(10000.0) / d_model)
+    )
+    pe = torch.zeros(seq_len, d_model, device=device)
+    pe[:, 0::2] = torch.sin(positions * div_term)
+    pe[:, 1::2] = torch.cos(positions * div_term)
+    return pe.unsqueeze(0)  
+
+
 class TransformerEncoder(nn.Module):
     def __init__(self, config, shared_embedding):
         super().__init__()
         self.embed_tokens = shared_embedding
-        self.pos_embed = nn.Embedding(config.MAX_SEQ_LEN, config.DIM_MODEL)
         self.embed_dropout = nn.Dropout(config.DROPOUT)
         self.blocks = nn.ModuleList(
             [TransformerBlock(config, is_decoder=False)
@@ -154,16 +166,12 @@ class TransformerEncoder(nn.Module):
     def forward(self, input_ids, padding_mask=None):
         seq_len = input_ids.size(1)
         token_emb = self.embed_tokens(input_ids)
-        positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0)
-        pos_emb = self.pos_embed(positions)
+        pos_emb = get_sinusoidal_embeddings(seq_len, token_emb.size(-1), input_ids.device)
         hidden_states = token_emb + pos_emb
         hidden_states = self.embed_dropout(hidden_states)
 
         for block in self.blocks:
-            hidden_states = block(
-                hidden_states,
-                self_mask=padding_mask
-            )
+            hidden_states = block(hidden_states, self_mask=padding_mask)
 
         return self.layer_norm(hidden_states)
 
@@ -172,7 +180,6 @@ class TransformerDecoder(nn.Module):
     def __init__(self, config, shared_embedding):
         super().__init__()
         self.embed_tokens = shared_embedding
-        self.pos_embed = nn.Embedding(config.MAX_SEQ_LEN, config.DIM_MODEL)
         self.embed_dropout = nn.Dropout(config.DROPOUT)
         self.blocks = nn.ModuleList(
             [TransformerBlock(config, is_decoder=True)
@@ -180,17 +187,10 @@ class TransformerDecoder(nn.Module):
         )
         self.layer_norm = RMSNorm(config.DIM_MODEL, eps=config.EPS_LAYER_NORM)
 
-    def forward(
-        self,
-        input_ids,
-        encoder_hidden_states,
-        self_mask=None,
-        cross_mask=None
-    ):
+    def forward(self, input_ids, encoder_hidden_states, self_mask=None, cross_mask=None):
         seq_len = input_ids.size(1)
         token_emb = self.embed_tokens(input_ids)
-        positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0)
-        pos_emb = self.pos_embed(positions)
+        pos_emb = get_sinusoidal_embeddings(seq_len, token_emb.size(-1), input_ids.device)
         hidden_states = token_emb + pos_emb
         hidden_states = self.embed_dropout(hidden_states)
 
