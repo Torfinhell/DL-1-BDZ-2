@@ -69,7 +69,7 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
                 outputs = model(input_ids=src, labels=tgt)
                 total_val_loss += outputs["loss"].item()
 
-                generated = model.generate(src, max_length=200)
+                generated = model.generate(src, max_length=100)
 
                 preds = decode_batch(
                     generated,
