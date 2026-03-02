@@ -31,12 +31,12 @@ class ModelConfig:
     EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
-    BATCH_SIZE:int=120
+    BATCH_SIZE:int=100
     DEVICE: torch.device = torch.device(
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
     DATA_FOLDER: str = "data"
-    NUM_EPOCHS: int = 15
+    NUM_EPOCHS: int = 13
     LR: float = 1e-4
     TRAIN_EPOCH_LEN: int = None
     GRAD_ACUM: int = 1
