@@ -61,7 +61,7 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
         all_refs = []
 
         with torch.no_grad():
-            for src, tgt, _, _ in dl_val:
+            for src, tgt in dl_val:
                 src = src.to(device)
                 tgt = tgt.to(device)
 
