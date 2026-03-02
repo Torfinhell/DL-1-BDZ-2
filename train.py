@@ -122,4 +122,4 @@ if __name__ == "__main__":
                         pin_memory=True, collate_fn=collate_fn)
 
     model = TransformerConditionalGeneration(model_config).to(training_config.DEVICE)
-    train(training_config, model, dl_train, dl_val, tgt_sp)   # pass target tokenizer for decoding
+    train(training_config, model, dl_train, dl_val, tgt_sp)   
