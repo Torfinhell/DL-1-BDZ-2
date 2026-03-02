@@ -31,7 +31,7 @@ class ModelConfig:
     EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
-    BATCH_SIZE:int=100
+    BATCH_SIZE:int=120
     DEVICE: torch.device = torch.device(
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
@@ -40,7 +40,6 @@ class TrainingConfig:
     LR: float = 1e-4
     TRAIN_EPOCH_LEN: int = None
     GRAD_ACUM: int = 1
-    VOCAB_SIZE = 32000
 
 @dataclass
 class InferenceConfig:
