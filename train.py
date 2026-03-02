@@ -38,7 +38,7 @@ def train(training_config:TrainingConfig, model, dl_train, dl_val, vocab):
             total_train_loss += loss.item() * gradient_accumulation_steps  
 
             if (step + 1) % gradient_accumulation_steps == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
 

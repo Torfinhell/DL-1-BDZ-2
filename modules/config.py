@@ -5,20 +5,20 @@ import torch
 class ModelConfig:
     NUM_HEADS: int = 8
     DIM_KV: int = 64
-    DIM_MODEL: int = 3000
+    DIM_MODEL: int = 512
     EPS_LAYER_NORM: float = 1e-8
-    D_FF: int = 2048
-    NUM_ENCODER_LAYERS: int = 2
-    NUM_DECODER_LAYERS: int = 2
+    D_FF: int = 1024
+    NUM_ENCODER_LAYERS: int = 4
+    NUM_DECODER_LAYERS: int = 4
     MAX_SEQ_LEN: int = 512
-    DROPOUT: float = 0.3
+    DROPOUT: float = 0.1
     VOCAB_SIZE: int = 0
     PAD_TOKEN_ID: int = 0
     BOS_TOKEN_ID: int = 2
     EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
-    BATCH_SIZE: int = 10
+    BATCH_SIZE: int = 40
     DEVICE: torch.device = torch.device(
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
