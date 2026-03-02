@@ -2,7 +2,7 @@ import torch
 import sacrebleu
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from modules.dataset import build_vocab_from_files, TranslationDataset, collate_fn, decode_batch
+from modules.dataset import build_tokenizer, TranslationDataset, collate_fn, decode_batch
 from modules.transformer import TransformerConditionalGeneration
 from modules.config import TrainingConfig, ModelConfig
 
@@ -96,52 +96,31 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
 
 
 if __name__ == "__main__":
-
     training_config = TrainingConfig()
     model_config = ModelConfig()
-    vocab = build_vocab_from_files([
-        f"{training_config.DATA_FOLDER}/train.de-en.de",
-        f"{training_config.DATA_FOLDER}/train.de-en.en",
-        f"{training_config.DATA_FOLDER}/val.de-en.de",
-        f"{training_config.DATA_FOLDER}/val.de-en.en",
-    ])
-    print(f"VOCAB SIZE is: {len(vocab)}")
-    model_config.VOCAB_SIZE = len(vocab)
-
-    model_config.PAD_TOKEN_ID = vocab["<pad>"]
-    model_config.BOS_TOKEN_ID = vocab["<bos>"]
-    model_config.EOS_TOKEN_ID = vocab["<eos>"]
+    data_folder = training_config.DATA_FOLDER
+    train_de = f"{data_folder}/train.de-en.de"
+    train_en = f"{data_folder}/train.de-en.en"
+    val_de = f"{data_folder}/val.de-en.de"
+    val_en = f"{data_folder}/val.de-en.en"
+    src_tokenizer = build_tokenizer([train_de, val_de], spacy_lang="de_core_news_sm", vocab_size=training_config.VOCAB_SIZE)
+    tgt_tokenizer = build_tokenizer([train_en, val_en], spacy_lang="en_core_web_sm", vocab_size=training_config.VOCAB_SIZE)
+    model_config.VOCAB_SIZE = max(src_tokenizer.get_vocab_size(), tgt_tokenizer.get_vocab_size())
+    model_config.PAD_TOKEN_ID = src_tokenizer.token_to_id("<pad>")
+    model_config.BOS_TOKEN_ID = src_tokenizer.token_to_id("<bos>")
+    model_config.EOS_TOKEN_ID = src_tokenizer.token_to_id("<eos>")
     ds_train = TranslationDataset(
-        vocab,
-        vocab,
-        f"{training_config.DATA_FOLDER}/train.de-en.de",
-        f"{training_config.DATA_FOLDER}/train.de-en.en",
+        src_tokenizer, tgt_tokenizer,
+        train_de, train_en,
         train_epoch_len=training_config.TRAIN_EPOCH_LEN
-        
     )
-
     ds_val = TranslationDataset(
-        vocab,
-        vocab,
-        f"{training_config.DATA_FOLDER}/val.de-en.de",
-        f"{training_config.DATA_FOLDER}/val.de-en.en"
+        src_tokenizer, tgt_tokenizer,
+        val_de, val_en
     )
-
-    dl_train = DataLoader(
-        ds_train,
-        batch_size=training_config.BATCH_SIZE,
-        shuffle=True,
-        pin_memory=True,
-        collate_fn=collate_fn
-    )
-
-    dl_val = DataLoader(
-        ds_val,
-        batch_size=training_config.BATCH_SIZE,
-        shuffle=False,
-        pin_memory=True,
-        collate_fn=collate_fn
-    )
-    model = TransformerConditionalGeneration(model_config)
-    model = model.to(training_config.DEVICE)
-    train(training_config, model, dl_train, dl_val, vocab)
+    dl_train = DataLoader(ds_train, batch_size=training_config.BATCH_SIZE, shuffle=True,
+                          pin_memory=True, collate_fn=collate_fn)
+    dl_val = DataLoader(ds_val, batch_size=training_config.BATCH_SIZE, shuffle=False,
+                        pin_memory=True, collate_fn=collate_fn)
+    model = TransformerConditionalGeneration(model_config).to(training_config.DEVICE)
+    train(training_config, model, dl_train, dl_val, tgt_tokenizer)
