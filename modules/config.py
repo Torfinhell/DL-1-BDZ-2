@@ -24,7 +24,7 @@ class ModelConfig:
     D_FF: int = 100
     NUM_ENCODER_LAYERS: int = 12
     NUM_DECODER_LAYERS: int = 12
-    DROPOUT: float = 0.0
+    DROPOUT: float = 0.1
     VOCAB_SIZE: int = 32000
     PAD_TOKEN_ID: int = 0
     BOS_TOKEN_ID: int = 2
@@ -36,7 +36,7 @@ class TrainingConfig:
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
     DATA_FOLDER: str = "data"
-    NUM_EPOCHS: int = 13
+    NUM_EPOCHS: int = 10
     LR: float = 1e-4
     TRAIN_EPOCH_LEN: int = None
     GRAD_ACUM: int = 1

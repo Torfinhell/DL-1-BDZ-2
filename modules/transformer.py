@@ -266,35 +266,48 @@ class TransformerConditionalGeneration(nn.Module):
         return {"loss": loss, "logits": logits}
 
     @torch.no_grad()
-    def generate(self, input_ids, max_length=40):
+    def generate(
+        self,
+        input_ids,
+        max_length=200,
+        repetition_penalty=1.0,
+        eos_token_id=None
+    ):
+        if eos_token_id is None:
+            eos_token_id = self.config.EOS_TOKEN_ID
         encoder_padding_mask = self.make_padding_mask(input_ids)
         encoder_hidden_states = self.encoder(input_ids, padding_mask=encoder_padding_mask)
-
+        batch_size = input_ids.size(0)
+        device = input_ids.device
         decoder_input_ids = torch.full(
-            (input_ids.size(0), 1),
+            (batch_size, 1),
             self.config.BOS_TOKEN_ID,
-            device=input_ids.device
+            dtype=torch.long,
+            device=device
         )
 
+        finished = torch.zeros(batch_size, dtype=torch.bool, device=device)
         for _ in range(max_length):
             outputs = self(
                 encoder_hidden_states=encoder_hidden_states,
                 decoder_input_ids=decoder_input_ids,
                 encoder_padding_mask=encoder_padding_mask
             )
-
             next_token_logits = outputs["logits"][:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-
-            decoder_input_ids = torch.cat(
-                [decoder_input_ids, next_token],
-                dim=-1
-            )
-
-            if (next_token == self.config.EOS_TOKEN_ID).all():
+            if repetition_penalty != 1.0:
+                for i in range(batch_size):
+                    if finished[i]:
+                        continue
+                    generated = decoder_input_ids[i].tolist()
+                    for token_id in set(generated):
+                        next_token_logits[i, token_id] /= repetition_penalty
+            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)  
+            decoder_input_ids = torch.cat([decoder_input_ids, next_token], dim=-1)
+            finished = finished | (next_token.squeeze(-1) == eos_token_id)
+            if finished.all():
                 break
 
-        return decoder_input_ids  
+        return decoder_input_ids
     def make_padding_mask(self, input_ids):
         if input_ids is None:
             return None
