@@ -36,7 +36,7 @@ class TrainingConfig:
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
     DATA_FOLDER: str = "data"
-    NUM_EPOCHS: int = 10
+    NUM_EPOCHS: int = 15
     LR: float = 1e-4
     TRAIN_EPOCH_LEN: int = None
     GRAD_ACUM: int = 1
