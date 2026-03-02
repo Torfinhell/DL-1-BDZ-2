@@ -18,7 +18,7 @@ class ModelConfig:
     EOS_TOKEN_ID: int = 4
 @dataclass
 class TrainingConfig:
-    BATCH_SIZE: int = 80
+    BATCH_SIZE: int = 40
     DEVICE: torch.device = torch.device(
         'cuda:0' if torch.cuda.is_available() else 'cpu'
     )
