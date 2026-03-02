@@ -7,10 +7,10 @@ class ModelConfig:
     DIM_KV: int = 64
     DIM_MODEL: int = 100
     EPS_LAYER_NORM: float = 1e-6
-    D_FF: int = 3072
+    D_FF: int = 100
     NUM_ENCODER_LAYERS: int = 12
     NUM_DECODER_LAYERS: int = 12
-    MAX_SEQ_LEN: int = 512
+    MAX_SEQ_LEN: int = 35
     DROPOUT: float = 0.1
     VOCAB_SIZE: int = 32000
     PAD_TOKEN_ID: int = 0
