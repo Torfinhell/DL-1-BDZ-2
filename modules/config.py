@@ -24,7 +24,7 @@ class ModelConfig:
     D_FF: int = 100
     NUM_ENCODER_LAYERS: int = 12
     NUM_DECODER_LAYERS: int = 12
-    DROPOUT: float = 0.1
+    DROPOUT: float = 0.0
     VOCAB_SIZE: int = 32000
     PAD_TOKEN_ID: int = 0
     BOS_TOKEN_ID: int = 2
