@@ -6,6 +6,7 @@ from functools import partial
 from modules.transformer import TransformerConditionalGeneration
 from modules.config import ModelConfig, InferenceConfig
 from modules.dataset import TranslationDataset, collate_fn, decode_batch
+from modules.post_processing import remove_duplicate_tokens, convert_to_list
 
 def inference(inference_config: InferenceConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,13 +48,13 @@ def inference(inference_config: InferenceConfig):
         for src, _ in tqdm(test_loader, desc="Translating"):
             src = src.to(device)
             generated_ids = model.generate(src, max_length=inference_config.MAX_LEN)
-            translations = decode_batch(
-                generated_ids,
-                tgt_sp,
-                pad_id=config.PAD_TOKEN_ID,
-                eos_id=config.EOS_TOKEN_ID
-            )
-            all_translations.extend(translations)
+            cleaned_sequences = remove_duplicate_tokens(generated_ids)
+            # cleaned_sequences=convert_to_list(generated_ids)
+            for seq in cleaned_sequences:
+                filtered = [t for t in seq if t not in (config.PAD_TOKEN_ID, config.EOS_TOKEN_ID, config.BOS_TOKEN_ID)]
+                text = tgt_sp.decode(filtered)
+                all_translations.append(text)
+
 
     with open(inference_config.OUTPUT_FILE, "w", encoding="utf-8") as f:
         for line in all_translations:
