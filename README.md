@@ -1,5 +1,5 @@
 # DL-1-BDZ-2
-Implementation of Tranformer model for translation from english to french
+Implementation of Tranformer model for translation from  french ещ english
 To install dependecies:
 ```
 conda create  -n dl-1-bdz-2 python=3.10

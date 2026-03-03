@@ -47,6 +47,6 @@ class InferenceConfig:
     TEST_FILE: str = "data/test1.de-en.de"
     OUTPUT_FILE: str = "translations.txt"
     REF_FILE: str = "data/val.de-en.en"     
-    BATCH_SIZE: int = 10
+    BATCH_SIZE: int = 1
     MAX_LEN: int = 100
     DATA_FOLDER: str = "data"
