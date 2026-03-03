@@ -211,3 +211,7 @@ data
 uv.lock
 models
 *txt
+wandb
+*.zip
+*.model
+*.vocab
