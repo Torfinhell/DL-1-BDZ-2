@@ -1,15 +1,17 @@
 import torch
-import sacrebleu
+import subprocess
+import tempfile
+import os
+import argparse
+import wandb
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from functools import partial
 from modules.dataset import TranslationDataset, collate_fn, decode_batch, train_sentencepiece
 from modules.transformer import TransformerConditionalGeneration
 from modules.config import TrainingConfig, ModelConfig
-import os
-from functools import partial
 
-
-def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
+def train(training_config: TrainingConfig, model, dl_train, dl_val, src_sp, tgt_sp, val_ref_path, use_wandb=False):
     device = training_config.DEVICE
 
     optimizer = torch.optim.AdamW(
@@ -26,15 +28,17 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
         optimizer,
         max_lr=training_config.LR,
         total_steps=total_optimizer_steps,
-        pct_start=0.1,              
-        anneal_strategy='cos',       
-        cycle_momentum=False         
+        pct_start=0.1,
+        anneal_strategy='cos',
+        cycle_momentum=False
     )
+
     for epoch in range(training_config.NUM_EPOCHS):
         model.train()
         total_train_loss = 0.0
         pbar = tqdm(dl_train, desc=f"Epoch {epoch+1}", leave=False)
         optimizer.zero_grad()
+
         for step, (src, tgt) in enumerate(pbar):
             src = src.to(device)
             tgt = tgt.to(device)
@@ -42,28 +46,49 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
             loss = outputs["loss"] / gradient_accumulation_steps
             loss.backward()
             total_train_loss += loss.item() * gradient_accumulation_steps
+
             if (step + 1) % gradient_accumulation_steps == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
-                scheduler.step()                   
+                scheduler.step()
                 optimizer.zero_grad()
-            current_lr = scheduler.get_last_lr()[0] 
+
+                current_lr = scheduler.get_last_lr()[0]
+                if use_wandb:
+                    wandb.log({
+                        "train_step_loss": loss.item() * gradient_accumulation_steps,
+                        "learning_rate": current_lr,
+                        "grad_norm": grad_norm
+                    })
+
+            current_lr = scheduler.get_last_lr()[0]
             pbar.set_postfix(loss=loss.item() * gradient_accumulation_steps,
                              lr=f"{current_lr:.2e}")
+
+
         if (step + 1) % gradient_accumulation_steps != 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
-            scheduler.step()                         
+            scheduler.step()
             optimizer.zero_grad()
+            current_lr = scheduler.get_last_lr()[0]
+            if use_wandb:
+                wandb.log({
+                    "train_step_loss": loss.item() * gradient_accumulation_steps,
+                    "learning_rate": current_lr,
+                    "grad_norm": grad_norm
+                })
 
         avg_train_loss = total_train_loss / len(dl_train)
+
+
         model.eval()
         total_val_loss = 0.0
         all_preds = []
-        all_refs = []
+        example_src = example_tgt = example_pred = None
 
         with torch.no_grad():
-            for src, tgt in dl_val:
+            for batch_idx, (src, tgt) in enumerate(dl_val):
                 src = src.to(device)
                 tgt = tgt.to(device)
 
@@ -74,21 +99,55 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
 
                 preds = decode_batch(
                     generated,
-                    vocab,
+                    tgt_sp,
                     pad_id=model.config.PAD_TOKEN_ID,
                     eos_id=model.config.EOS_TOKEN_ID
                 )
-                refs = decode_batch(
-                    tgt,
-                    vocab,
-                    pad_id=model.config.PAD_TOKEN_ID,
-                    eos_id=model.config.EOS_TOKEN_ID
-                )
+                if batch_idx == 0 and example_src is None:
+                    src_text = decode_batch(
+                        src[:1],
+                        src_sp,
+                        pad_id=model.config.PAD_TOKEN_ID,
+                        eos_id=model.config.EOS_TOKEN_ID
+                    )[0]
+                    tgt_text = decode_batch(
+                        tgt[:1],
+                        tgt_sp,
+                        pad_id=model.config.PAD_TOKEN_ID,
+                        eos_id=model.config.EOS_TOKEN_ID
+                    )[0]
+                    pred_text = preds[0]
+                    example_src, example_tgt, example_pred = src_text, tgt_text, pred_text
+
                 all_preds.extend(preds)
-                all_refs.extend([[r] for r in refs])
 
         avg_val_loss = total_val_loss / len(dl_val)
-        bleu = sacrebleu.corpus_bleu(all_preds, all_refs).score
+
+
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.txt', delete=False) as f:
+            for line in all_preds:
+                f.write(line + '\n')
+            pred_file = f.name
+
+        cmd = f"cat {pred_file} | sacrebleu {val_ref_path} --tokenize none --width 2 -b"
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        bleu = float(result.stdout.strip())
+        os.unlink(pred_file)
+
+        if use_wandb:
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss_epoch": avg_train_loss,
+                "val_loss_epoch": avg_val_loss,
+                "bleu_epoch": bleu
+            })
+            if example_src is not None:
+                wandb.log({
+                    "example_translation": wandb.Table(
+                        columns=["Source", "Target", "Prediction"],
+                        data=[[example_src, example_tgt, example_pred]]
+                    )
+                })
 
         print(f"\nEpoch {epoch+1}")
         print(f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | BLEU: {bleu:.2f}")
@@ -98,16 +157,48 @@ def train(training_config: TrainingConfig, model, dl_train, dl_val, vocab):
             os.makedirs("models", exist_ok=True)
             torch.save(model.state_dict(), "models/best_model.pt")
 
+    if use_wandb:
+        wandb.finish()
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--wandb_token', type=str, default=None, help='Weights & Biases API token (optional)')
+    args = parser.parse_args()
+
+    use_wandb = args.wandb_token is not None
+    if use_wandb:
+
+        wandb.login(key=args.wandb_token)
+
     training_config = TrainingConfig()
     model_config = ModelConfig()
+
+    if use_wandb:
+        wandb.init(
+            project="translation",
+            mode="offline",
+            config={
+                "batch_size": training_config.BATCH_SIZE,
+                "lr": training_config.LR,
+                "num_epochs": training_config.NUM_EPOCHS,
+                "grad_accum": training_config.GRAD_ACUM,
+                "d_model": model_config.DIM_MODEL,
+                "num_heads": model_config.NUM_HEADS,
+                "num_encoder_layers": model_config.NUM_ENCODER_LAYERS,
+                "num_decoder_layers": model_config.NUM_DECODER_LAYERS,
+                "d_ff": model_config.D_FF,
+                "dropout": model_config.DROPOUT,
+                "vocab_size": model_config.VOCAB_SIZE,
+            }
+        )
 
     data_folder = training_config.DATA_FOLDER
     train_de = f"{data_folder}/train.de-en.de"
     train_en = f"{data_folder}/train.de-en.en"
     val_de = f"{data_folder}/val.de-en.de"
     val_en = f"{data_folder}/val.de-en.en"
+
     src_sp = train_sentencepiece([train_de, val_de], "spm_de", vocab_size=model_config.VOCAB_SIZE)
     tgt_sp = train_sentencepiece([train_en, val_en], "spm_en", vocab_size=model_config.VOCAB_SIZE)
 
@@ -117,12 +208,13 @@ if __name__ == "__main__":
     model_config.EOS_TOKEN_ID = src_sp.eos_id()
 
     ds_train = TranslationDataset(
-    src_sp, tgt_sp, train_de, train_en,
-    train_epoch_len=training_config.TRAIN_EPOCH_LEN
+        src_sp, tgt_sp, train_de, train_en,
+        train_epoch_len=training_config.TRAIN_EPOCH_LEN
     )
     ds_val = TranslationDataset(
         src_sp, tgt_sp, val_de, val_en
     )
+
     collate_fn_with_pad = partial(collate_fn, pad_id=model_config.PAD_TOKEN_ID)
 
     dl_train = DataLoader(
@@ -141,4 +233,5 @@ if __name__ == "__main__":
     )
 
     model = TransformerConditionalGeneration(model_config).to(training_config.DEVICE)
-    train(training_config, model, dl_train, dl_val, tgt_sp)   
+
+    train(training_config, model, dl_train, dl_val, src_sp, tgt_sp, val_en, use_wandb=use_wandb)
