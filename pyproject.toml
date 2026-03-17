@@ -13,4 +13,5 @@ dependencies = [
     "torchaudio==0.13.1",
     "tqdm>=4.67.3",
     "wandb>=0.25.0",
+    "torch-xla>=2.9.0",
 ]
