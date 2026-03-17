@@ -4,11 +4,11 @@ import torch
 @dataclass
 class ModelConfig:
     NUM_HEADS: int = 16
-    DIM_MODEL: int = 1024
-    D_FF: int = 4096
-    NUM_ENCODER_LAYERS: int = 4
-    NUM_DECODER_LAYERS: int = 4
-    DROPOUT: float = 0.5
+    DIM_MODEL: int = 256
+    D_FF: int = 1024
+    NUM_ENCODER_LAYERS: int = 12
+    NUM_DECODER_LAYERS: int = 12
+    DROPOUT: float = 0.2
     VOCAB_SIZE: int = 32000
     PAD_TOKEN_ID: int = 0
     BOS_TOKEN_ID: int = 2
@@ -19,7 +19,7 @@ class ModelConfig:
 class TrainConfig:
     BATCH_SIZE: int = 20
     LR: float = 3e-3
-    NUM_EPOCHS: int = 40
+    NUM_EPOCHS: int = 20
     DEVICE: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     DATA_FOLDER: str = "./data"
     LOG_WANDB: bool = False
