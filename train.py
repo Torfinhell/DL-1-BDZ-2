@@ -10,12 +10,12 @@ import sacrebleu
 import wandb
 from torch.cuda.amp import autocast, GradScaler
 import torch_xla.core.xla_model as xm
-
+import torch_xla
 def train_model(config, train_loader, val_loader, model, src_sp, tgt_sp, val_ref_file):
-    device = xm.xla_device()
-    model = model.to(device)
+    device = torch_xla.device()
+    # model = model.to(device)
     # optional: cast to bfloat16
-    # model = model.to(torch.bfloat16)
+    model = model.to(torch.bfloat16)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
     steps_per_epoch = len(train_loader) // config.GRAD_ACCUM_STEPS
@@ -34,9 +34,9 @@ def train_model(config, train_loader, val_loader, model, src_sp, tgt_sp, val_ref
 
         pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}')
         for step, (src, tgt) in enumerate(pbar, 1):
-            src, tgt = src.to(device), tgt.to(device)
+            # src, tgt = src.to(device), tgt.to(device)
             # optional: cast to bfloat16
-            # src, tgt = src.to(torch.bfloat16), tgt.to(torch.bfloat16)
+            src, tgt = src.to(torch.bfloat16), tgt.to(torch.bfloat16)
 
             loss, _ = model(src, labels=tgt)
 
