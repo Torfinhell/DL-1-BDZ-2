@@ -23,14 +23,14 @@ class TrainConfig:
     DEVICE: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     DATA_FOLDER: str = "./data"
     LOG_WANDB: bool = False
-    USE_BF16: bool = False
+    USE_BF16: bool = True
     COMPILE: bool = True
     SAVE_PATH: str = "models/best_model.pt"
     GRAD_ACCUM_STEPS: int = 4
 
 @dataclass
 class InferenceConfig:
-    MODEL_PATH: str = "best_model.pt"
+    MODEL_PATH: str = "models/best_model.pt"
     TEST_FILE: str = "./data/test1.de-en.de"
     OUTPUT_FILE: str = "./data/translations.txt"
     BATCH_SIZE: int = 32
