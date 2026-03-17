@@ -23,7 +23,7 @@ class TrainConfig:
     DEVICE: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     DATA_FOLDER: str = "./data"
     LOG_WANDB: bool = False
-    USE_BF16: bool = True
+    USE_BF16: bool = False
     COMPILE: bool = True
     SAVE_PATH: str = "models/best_model.pt"
     GRAD_ACCUM_STEPS: int = 4
