@@ -19,7 +19,7 @@ class ModelConfig:
 class TrainConfig:
     BATCH_SIZE: int = 20
     LR: float = 3e-3
-    NUM_EPOCHS: int = 20
+    NUM_EPOCHS: int = 15
     DEVICE: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     DATA_FOLDER: str = "./data"
     LOG_WANDB: bool = False
