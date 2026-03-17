@@ -115,9 +115,9 @@ if __name__=="__main__":
 
     collate_fn = partial(collate, pad_id=model_cfg.PAD_TOKEN_ID)
     train_loader = DataLoader(train_ds, batch_size=train_cfg.BATCH_SIZE, shuffle=True,
-                            collate_fn=collate_fn, pin_memory=True)
+                            collate_fn=collate_fn, pin_memory=False, num_workers=8)
     val_loader = DataLoader(val_ds, batch_size=train_cfg.BATCH_SIZE, shuffle=False,
-                            collate_fn=collate_fn, pin_memory=True)
+                            collate_fn=collate_fn, pin_memory=False, num_workers=8)
 
     model = TransformerMT(model_cfg)
 
