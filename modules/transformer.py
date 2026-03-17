@@ -186,8 +186,8 @@ class TransformerDecoder(nn.Module):
     def forward(self, input_ids, encoder_hidden_states, self_mask=None, cross_mask=None):
         seq_len = input_ids.size(1)
         token_emb = self.embed_tokens(input_ids)
-        pos_emb = get_sinusoidal_embeddings(seq_len, token_emb.size(-1), input_ids.device)
-        hidden_states = token_emb + pos_emb
+        # pos_emb = get_sinusoidal_embeddings(seq_len, token_emb.size(-1), input_ids.device)
+        hidden_states = token_emb #+ pos_emb
         hidden_states = self.embed_dropout(hidden_states)
 
         for block in self.blocks:

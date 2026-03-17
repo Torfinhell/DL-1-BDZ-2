@@ -215,3 +215,4 @@ wandb
 *.zip
 *.model
 *.vocab
+*.pt

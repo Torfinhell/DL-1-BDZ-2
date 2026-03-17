@@ -1,237 +1,140 @@
+
 import torch
-import subprocess
-import tempfile
-import os
-import argparse
-import wandb
-from tqdm import tqdm
 from torch.utils.data import DataLoader
 from functools import partial
-from modules.dataset import TranslationDataset, collate_fn, decode_batch, train_sentencepiece
-from modules.transformer import TransformerConditionalGeneration
-from modules.config import TrainingConfig, ModelConfig
+from tqdm import tqdm
+from modules.config import TrainConfig, ModelConfig
+from modules.transformer_second_impl import TransformerMT
+from modules.dataset import train_spm, TranslationDataset, collate
+import sacrebleu
+import wandb
+from torch.cuda.amp import autocast, GradScaler
 
-def train(training_config: TrainingConfig, model, dl_train, dl_val, src_sp, tgt_sp, val_ref_path, use_wandb=False):
-    device = training_config.DEVICE
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=training_config.LR
-    )
+def train_model(config, train_loader, val_loader, model, src_sp, tgt_sp, val_ref_file):
+    device = config.DEVICE
+    model.to(device)
+    if config.COMPILE and hasattr(torch, 'compile'):
+        model = torch.compile(model)
 
-    gradient_accumulation_steps = training_config.GRAD_ACUM
-    best_bleu = 0.0
-    steps_per_epoch = (len(dl_train) + gradient_accumulation_steps - 1) // gradient_accumulation_steps
-    total_optimizer_steps = steps_per_epoch * training_config.NUM_EPOCHS
-
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.LR)
+    steps_per_epoch = len(train_loader) // config.GRAD_ACCUM_STEPS
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=training_config.LR,
-        total_steps=total_optimizer_steps,
-        pct_start=0.1,
-        anneal_strategy='cos',
-        cycle_momentum=False
+        optimizer, config.LR,
+        epochs=config.NUM_EPOCHS,
+        steps_per_epoch=steps_per_epoch
     )
 
-    for epoch in range(training_config.NUM_EPOCHS):
+    scaler = GradScaler('cuda', enabled=config.USE_BF16)
+    best_bleu = 0.0
+
+    for epoch in range(config.NUM_EPOCHS):
         model.train()
-        total_train_loss = 0.0
-        pbar = tqdm(dl_train, desc=f"Epoch {epoch+1}", leave=False)
+        total_train_loss = 0
         optimizer.zero_grad()
 
-        for step, (src, tgt) in enumerate(pbar):
-            src = src.to(device)
-            tgt = tgt.to(device)
-            outputs = model(input_ids=src, labels=tgt)
-            loss = outputs["loss"] / gradient_accumulation_steps
-            loss.backward()
-            total_train_loss += loss.item() * gradient_accumulation_steps
+        pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}')
+        for step, (src, tgt) in enumerate(pbar, 1):
+            src, tgt = src.to(device), tgt.to(device)
 
-            if (step + 1) % gradient_accumulation_steps == 0:
-                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
+            if config.USE_BF16:
+                with autocast('cuda', dtype=torch.bfloat16):
+                    loss, _ = model(src, labels=tgt)
+            else:
+                loss, _ = model(src, labels=tgt)
+
+            scaled_loss = loss / config.GRAD_ACCUM_STEPS
+            scaler.scale(scaled_loss).backward()
+
+            if step % config.GRAD_ACCUM_STEPS == 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                scaler.step(optimizer)
+                scaler.update()
                 scheduler.step()
                 optimizer.zero_grad()
 
-                current_lr = scheduler.get_last_lr()[0]
-                if use_wandb:
-                    wandb.log({
-                        "train_step_loss": loss.item() * gradient_accumulation_steps,
-                        "learning_rate": current_lr,
-                        "grad_norm": grad_norm
-                    })
-
-            current_lr = scheduler.get_last_lr()[0]
-            pbar.set_postfix(loss=loss.item() * gradient_accumulation_steps,
-                             lr=f"{current_lr:.2e}")
-
-
-        if (step + 1) % gradient_accumulation_steps != 0:
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            current_lr = scheduler.get_last_lr()[0]
-            if use_wandb:
-                wandb.log({
-                    "train_step_loss": loss.item() * gradient_accumulation_steps,
-                    "learning_rate": current_lr,
-                    "grad_norm": grad_norm
-                })
-
-        avg_train_loss = total_train_loss / len(dl_train)
-
+            total_train_loss += loss.item()
+            pbar.set_postfix(loss=loss.item(), step=step)
 
         model.eval()
-        total_val_loss = 0.0
-        all_preds = []
-        example_src = example_tgt = example_pred = None
-
+        total_val_loss = 0
+        preds = []
         with torch.no_grad():
-            for batch_idx, (src, tgt) in enumerate(dl_val):
-                src = src.to(device)
-                tgt = tgt.to(device)
+            for src, tgt in tqdm(val_loader, desc='Validating', leave=False):
+                src, tgt = src.to(device), tgt.to(device)
 
-                outputs = model(input_ids=src, labels=tgt)
-                total_val_loss += outputs["loss"].item()
+                if config.USE_BF16:
+                    with autocast('cuda', dtype=torch.bfloat16):
+                        loss, _ = model(src, labels=tgt)
+                else:
+                    loss, _ = model(src, labels=tgt)
 
-                generated = model.generate(src, max_length=100)
+                total_val_loss += loss.item()
+                out = model.generate(src, max_len=100)
+                for seq in out:
+                    ids = [i for i in seq.cpu().tolist()
+                           if i not in (model.config.PAD_TOKEN_ID,
+                                        model.config.EOS_TOKEN_ID,
+                                        model.config.BOS_TOKEN_ID)]
+                    preds.append(tgt_sp.decode(ids))
 
-                preds = decode_batch(
-                    generated,
-                    tgt_sp,
-                    pad_id=model.config.PAD_TOKEN_ID,
-                    eos_id=model.config.EOS_TOKEN_ID
-                )
-                if batch_idx == 0 and example_src is None:
-                    src_text = decode_batch(
-                        src[:1],
-                        src_sp,
-                        pad_id=model.config.PAD_TOKEN_ID,
-                        eos_id=model.config.EOS_TOKEN_ID
-                    )[0]
-                    tgt_text = decode_batch(
-                        tgt[:1],
-                        tgt_sp,
-                        pad_id=model.config.PAD_TOKEN_ID,
-                        eos_id=model.config.EOS_TOKEN_ID
-                    )[0]
-                    pred_text = preds[0]
-                    example_src, example_tgt, example_pred = src_text, tgt_text, pred_text
+        avg_train_loss = total_train_loss / len(train_loader)
+        avg_val_loss = total_val_loss / len(val_loader)
+        bleu = sacrebleu.corpus_bleu(preds,
+            [[line.strip() for line in open(val_ref_file, encoding='utf-8')]]).score
 
-                all_preds.extend(preds)
-
-        avg_val_loss = total_val_loss / len(dl_val)
-
-
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.txt', delete=False) as f:
-            for line in all_preds:
-                f.write(line + '\n')
-            pred_file = f.name
-
-        cmd = f"cat {pred_file} | sacrebleu {val_ref_path} --tokenize none --width 2 -b"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        bleu = float(result.stdout.strip())
-        os.unlink(pred_file)
-
-        if use_wandb:
-            wandb.log({
-                "epoch": epoch + 1,
-                "train_loss_epoch": avg_train_loss,
-                "val_loss_epoch": avg_val_loss,
-                "bleu_epoch": bleu
-            })
-            if example_src is not None:
-                wandb.log({
-                    "example_translation": wandb.Table(
-                        columns=["Source", "Target", "Prediction"],
-                        data=[[example_src, example_tgt, example_pred]]
-                    )
-                })
-
-        print(f"\nEpoch {epoch+1}")
-        print(f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | BLEU: {bleu:.2f}")
+        print(f'Epoch {epoch+1}: train loss {avg_train_loss:.4f}, '
+              f'val loss {avg_val_loss:.4f}, BLEU {bleu:.2f}')
 
         if bleu > best_bleu:
             best_bleu = bleu
-            os.makedirs("models", exist_ok=True)
-            torch.save(model.state_dict(), "models/best_model.pt")
+            state_dict = model.state_dict()
+            if any(k.startswith('_orig_mod.') for k in state_dict):
+                new_state_dict = {k.replace('_orig_mod.', ''): v
+                                  for k, v in state_dict.items()}
+            else:
+                new_state_dict = state_dict
+            torch.save(new_state_dict, f"{config.SAVE_PATH}_{bleu}")
 
-    if use_wandb:
+        if config.LOG_WANDB:
+            wandb.log({'train_loss': avg_train_loss,
+                       'val_loss': avg_val_loss,
+                       'bleu': bleu})
+if __name__=="__main__":
+    train_cfg = TrainConfig()
+    model_cfg = ModelConfig()
+    # os.makedirs(os.path.dirname(train_cfg.SAVE_PATH), exist_ok=True)
+    src_sp = train_spm([f"{train_cfg.DATA_FOLDER}/train.de-en.de",
+                        f"{train_cfg.DATA_FOLDER}/val.de-en.de"], 'spm_de', model_cfg.VOCAB_SIZE)
+    tgt_sp = train_spm([f"{train_cfg.DATA_FOLDER}/train.de-en.en",
+                        f"{train_cfg.DATA_FOLDER}/val.de-en.en"], 'spm_en', model_cfg.VOCAB_SIZE)
+
+    model_cfg.VOCAB_SIZE = max(src_sp.vocab_size(), tgt_sp.vocab_size())
+    model_cfg.PAD_TOKEN_ID = src_sp.pad_id()
+    model_cfg.BOS_TOKEN_ID = src_sp.bos_id()
+    model_cfg.EOS_TOKEN_ID = src_sp.eos_id()
+
+    train_ds = TranslationDataset(src_sp, tgt_sp,
+                                    f"{train_cfg.DATA_FOLDER}/train.de-en.de",
+                                    f"{train_cfg.DATA_FOLDER}/train.de-en.en")
+    val_ds = TranslationDataset(src_sp, tgt_sp,
+                                f"{train_cfg.DATA_FOLDER}/val.de-en.de",
+                                f"{train_cfg.DATA_FOLDER}/val.de-en.en")
+
+    collate_fn = partial(collate, pad_id=model_cfg.PAD_TOKEN_ID)
+    train_loader = DataLoader(train_ds, batch_size=train_cfg.BATCH_SIZE, shuffle=True,
+                            collate_fn=collate_fn, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=train_cfg.BATCH_SIZE, shuffle=False,
+                            collate_fn=collate_fn, pin_memory=True)
+
+    model = TransformerMT(model_cfg)
+
+    if train_cfg.LOG_WANDB:
+        wandb.init(project='translation-minimal', config={**train_cfg.__dict__, **model_cfg.__dict__})
+
+    train_model(train_cfg, train_loader, val_loader, model, src_sp, tgt_sp,
+                f"{train_cfg.DATA_FOLDER}/val.de-en.en")
+
+    if train_cfg.LOG_WANDB:
         wandb.finish()
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--wandb_token', type=str, default=None, help='Weights & Biases API token (optional)')
-    args = parser.parse_args()
-
-    use_wandb = args.wandb_token is not None
-    if use_wandb:
-
-        wandb.login(key=args.wandb_token)
-
-    training_config = TrainingConfig()
-    model_config = ModelConfig()
-
-    if use_wandb:
-        wandb.init(
-            project="translation",
-            mode="offline",
-            config={
-                "batch_size": training_config.BATCH_SIZE,
-                "lr": training_config.LR,
-                "num_epochs": training_config.NUM_EPOCHS,
-                "grad_accum": training_config.GRAD_ACUM,
-                "d_model": model_config.DIM_MODEL,
-                "num_heads": model_config.NUM_HEADS,
-                "num_encoder_layers": model_config.NUM_ENCODER_LAYERS,
-                "num_decoder_layers": model_config.NUM_DECODER_LAYERS,
-                "d_ff": model_config.D_FF,
-                "dropout": model_config.DROPOUT,
-                "vocab_size": model_config.VOCAB_SIZE,
-            }
-        )
-
-    data_folder = training_config.DATA_FOLDER
-    train_de = f"{data_folder}/train.de-en.de"
-    train_en = f"{data_folder}/train.de-en.en"
-    val_de = f"{data_folder}/val.de-en.de"
-    val_en = f"{data_folder}/val.de-en.en"
-
-    src_sp = train_sentencepiece([train_de, val_de], "spm_de", vocab_size=model_config.VOCAB_SIZE)
-    tgt_sp = train_sentencepiece([train_en, val_en], "spm_en", vocab_size=model_config.VOCAB_SIZE)
-
-    model_config.VOCAB_SIZE = max(src_sp.get_piece_size(), tgt_sp.get_piece_size())
-    model_config.PAD_TOKEN_ID = src_sp.pad_id()
-    model_config.BOS_TOKEN_ID = src_sp.bos_id()
-    model_config.EOS_TOKEN_ID = src_sp.eos_id()
-
-    ds_train = TranslationDataset(
-        src_sp, tgt_sp, train_de, train_en,
-        train_epoch_len=training_config.TRAIN_EPOCH_LEN
-    )
-    ds_val = TranslationDataset(
-        src_sp, tgt_sp, val_de, val_en
-    )
-
-    collate_fn_with_pad = partial(collate_fn, pad_id=model_config.PAD_TOKEN_ID)
-
-    dl_train = DataLoader(
-        ds_train,
-        batch_size=training_config.BATCH_SIZE,
-        shuffle=True,
-        pin_memory=True,
-        collate_fn=collate_fn_with_pad
-    )
-    dl_val = DataLoader(
-        ds_val,
-        batch_size=training_config.BATCH_SIZE,
-        shuffle=False,
-        pin_memory=True,
-        collate_fn=collate_fn_with_pad
-    )
-
-    model = TransformerConditionalGeneration(model_config).to(training_config.DEVICE)
-
-    train(training_config, model, dl_train, dl_val, src_sp, tgt_sp, val_en, use_wandb=use_wandb)
